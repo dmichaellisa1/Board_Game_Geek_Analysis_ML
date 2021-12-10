@@ -1,0 +1,241 @@
+---
+title: "Data Cleaning and Overview"
+author: "Meg Czabala, Rohan Daryanani, Michael Lisa, J Angel Ramirez, & Emma Wilson"
+date: "`r Sys.Date()`"
+output: html_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+```{r}
+library(readxl)
+bgg <- read_excel("~/2022 Notre Dame/Mod 2/Machine Learning/Project/BGG_Data_Set.xlsx")
+library(stringr)
+library(dplyr)
+library(ggplot2)
+```
+## Data Cleaning
+#### Create Mechanics Columns
+```{r}
+BGG <- readxl::read_xlsx("BGG_Data_Set.xlsx") #you might need to change your address
+
+#Drop columns that do not have any domain or mechanics
+BGG <- BGG %>% 
+  filter(!(is.na(Domains) & is.na(Mechanics))) 
+colnames(BGG) <- tolower(trimws(colnames(BGG)))
+colnames(BGG) <- gsub(" ","_",colnames(BGG))
+
+mechanics <- BGG$mechanics[1:nrow(BGG)]
+mechanics <- gsub(" ","",mechanics) #need to kick out the space, or the result will be really shitty, trust me
+abc <- strsplit(mechanics, ",")
+
+
+blist <- c(0)
+for (i in 1:nrow(BGG)) {
+  alist <- abc[[i]]
+  blist <- append(blist,  alist)
+
+}
+mechanics_list <- unique(blist)[-1] #now we have the unique list
+
+
+mech <- matrix(data = 0, 
+       nrow = nrow(BGG), 
+       ncol = length(mechanics_list), 
+       dimnames = list(
+         c(1:nrow(BGG)),c(mechanics_list)
+       )) #need to build up a matrix to filling out the data
+
+
+for (i in 1:ncol(mech)){
+  grepl_list <- grepl(mechanics_list[i],mechanics)
+  mech[,i
+       ] <- grepl_list
+} #run the for loop to filling those data for us
+#you can add this matrix back to your original data
+
+mech <- mech[, -174]
+data <- BGG[, -13]
+
+data <- cbind(data, mech)
+
+colnames(data) <- tolower(trimws(colnames(data)))
+```
+
+#### Create Domains Columns
+```{r}
+domains <- BGG$domains[1 : dim(data)[1]]
+domains <- gsub(" ", "", domains) #need to kick out the space
+abc <- strsplit(domains, ",")
+
+
+blist <- c(0)
+for (i in 1:nrow(BGG)) {
+  alist <- abc[[i]]
+  blist <- append(blist,  alist)
+
+}
+domains_list <- unique(blist)[-1] #now we have the unique list
+
+
+dom <- matrix(data = 0, 
+       nrow = nrow(BGG), 
+       ncol = length(domains_list), 
+       dimnames = list(
+         c(1:nrow(BGG)),c(domains_list)
+       )) #need to build up a matrix to filling out the data
+
+
+for (i in 1:ncol(dom)){
+  grepl_list <- grepl(domains_list[i],domains)
+  dom[,i
+       ] <- grepl_list
+} #run the for loop to filling those data for us
+#you can add this matrix back to your original data
+
+dom <- dom[, -9]
+data <- data[, -13]
+
+data <- cbind(data, dom)
+
+colnames(data) <- tolower(trimws(colnames(data)))
+
+```
+
+
+
+#### Create Number of Mechanics Column
+```{r}
+total_mech <- data %>% 
+  rowwise() %>% 
+  summarise(total_mech = sum(c_across(13:194)))
+
+clean_data <- cbind(data, total_mech)
+```
+
+#### Create Number of Domains Column
+```{r}
+total_dom <- clean_data %>% 
+  rowwise() %>% 
+  summarise(total_dom = sum(c_across(195:202)))
+
+clean_data <- cbind(clean_data, total_dom)
+```
+
+#### Remove Rows with No Mechanics
+```{r}
+clean_data <- clean_data %>% 
+  filter(total_mech != 0)
+```
+
+#### Standardizing names
+```{r}
+colnames(clean_data) <- tolower(colnames(clean_data))
+
+colnames(clean_data) <- gsub(" ", "_", colnames(clean_data))
+```
+
+
+```{r}
+save(clean_data, file = 'clean_data.rda')
+```
+
+## Initial Analysis
+```{r}
+load("clean_data.rda")
+```
+
+```{r}
+dim(clean_data)
+```
+
+
+### Visualizations of Dependent Variables
+```{r}
+ggplot(clean_data, aes(rating_average, owned_users)) +
+  geom_point(alpha = 0.3) + 
+  geom_smooth(method = "lm", color = "purple") + 
+  theme_bw() + 
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  labs(x = "Average Rating", 
+       y = "Number of Owners",
+       title = "Avearge Rating v Number of Owners")
+
+
+```
+
+
+#### Domains
+```{r}
+dat.m <- data.table::melt(clean_data, measure.vars=195:202)
+temp <- dat.m %>% 
+  select(rating_average, variable, value) %>% 
+  mutate(variable = as.factor(variable)) %>% 
+  filter(value == 1)
+
+ggplot(temp, aes(x = rating_average,  
+                  y = variable)) + 
+  geom_boxplot(alpha = 0.7) + 
+  theme_bw() + 
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  labs(x = "Average Rating", 
+       y = "Domain",
+       title = "Average Rating v Domain")
+
+
+```
+
+
+#### Play Time
+```{r}
+# Filter out one outlier in play time data
+playtime <- clean_data %>% 
+  filter(play_time < 40000)
+
+ggplot(playtime, aes(play_time, rating_average)) +
+  geom_point(alpha = 0.3) + 
+  geom_smooth(method = "lm", color = "purple") + 
+  theme_bw() + 
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  labs(x = "Play Time (minutes)", 
+       y = "Average Rating",
+       title = "Avearge Rating v Play Time") +
+  ylim(0, 10)
+
+
+```
+
+#### Complexity
+```{r}
+ggplot(clean_data, aes(complexity_average, rating_average)) +
+  geom_point(alpha = 0.3) + 
+  geom_smooth(method = "lm", color = "purple") + 
+  theme_bw() + 
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  labs(x = "Average Complexity Score", 
+       y = "Average Rating",
+       title = "Avearge Rating v Average Complexity Score") +
+  ylim(0, 10)
+
+
+```
+
+#### Missing Data
+```{r}
+variables <- names(clean_data)[c(2,4:12)]
+
+visdat::vis_miss(clean_data[, variables])
+```
